@@ -1,0 +1,42 @@
+#!/bin/sh
+# Start the Tribes 2 dedicated server (START_EXE).
+#
+# Runs `Tribes2.exe -dedicated -nologin -serverprefs prefs/lancommander.cs [START_ARGS] -mod
+# <T2_MOD>` under Wine from GameData/. The server console only goes to a Win32 console that
+# Wine can't show headless, so <mod>/autoexec.cs turns on console.log and this script streams it.
+set -e
+
+root="${SERVER_ROOT:-/config/Merged}"
+gamedata="$root/GameData"
+
+if [ ! -f "$gamedata/Tribes2.exe" ]; then
+    echo "GameData/Tribes2.exe not found in $root. Put a Tribes 2 install in /config/Server." >&2
+    exit 1
+fi
+
+cd "$gamedata"
+
+mod="${T2_MOD:-base}"
+if [ ! -d "$mod" ]; then
+    echo "Mod folder GameData/$mod not found" >&2
+    exit 1
+fi
+
+# Like the game's own launch .bat files: drop compiled scripts so edited .cs files take effect
+for dir in base/scripts "$mod/scripts"; do
+    [ -d "$dir" ] && find "$dir" -name '*.dso' -delete
+done
+
+: > console.log
+tail -n +1 -F console.log 2>/dev/null &
+
+# The game's argument parser skips the argument after `-mod <name>`, so -mod goes last
+set -- -dedicated -nologin -serverprefs prefs/lancommander.cs "$@"
+if [ "$mod" != base ]; then
+    set -- "$@" -mod "$mod"
+fi
+
+printf 'Starting: Tribes2.exe %s\n' "$*"
+
+export WINE_WORKDIR="$gamedata"
+exec wine-run Tribes2.exe "$@"
